@@ -1,0 +1,40 @@
+baseurl = "https://thefallenphoenix.net/"
+languageCode = "en-GB"
+title = "Danny Roberts"
+theme = "hugo-sustain"
+highlight = true
+
+[permalinks]
+  post = "/:year/:month/:day/:slug"
+
+[params]
+  avatar = "avatar.png"
+  author = "Danny Roberts"
+  description = "IT professional specialising in Open Source, AWS Cloud, DevOps tooling & processes and Agile with a passion for good documentation."
+
+  # Custom assets can be linked with their paths relative to static/
+  custom_css = []
+  custom_js  = []
+
+[params.social]
+  Github   = "kemra102"
+  Email    = "danny@thefallenphoenix.net"
+  Twitter  = "kemra102"
+  LinkedIn = "kemra102"
+
+## Main Menu
+[[menu.main]]
+  name = "blog"
+  weight = 100
+  identifier = "blog"
+  url = "/blog/"
+# [[menu.main]]
+#   name = "projects"
+#   identifier = "projects"
+#   weight = 200
+#   url = "/projects/"
+[[menu.main]]
+  name = "resume"
+  identifier = "resume"
+  weight = 300
+  url = "https://docs.google.com/document/d/1kpHt1jA65unXkgB_9yLuYKbtOi_T2kDXhnrOeAsFmlc/edit?usp=sharing"

@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+  <head>
+    <base href="https://thefallenphoenix.net/">
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="author" content="Danny Roberts" />
+    <meta name="description" content="IT professional specialising in Open Source, AWS Cloud, DevOps tooling &amp; processes and Agile with a passion for good documentation.">
+    <link rel="shortcut icon" type="image/x-icon" href="https://thefallenphoenix.net/img/favicon.ico">
+    <title>Requests &amp; Limits in K8s</title>
+    <meta name="generator" content="Hugo 0.74.3" />
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+    <link rel="stylesheet" type="text/css" href="https://thefallenphoenix.net/css/main.css" /><link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.7.0/styles/tomorrow.min.css">
+    
+    <link rel="stylesheet" type="text/css" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css" />
+    <link rel="stylesheet" type="text/css" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,400,200bold,400old" />
+    
+    <!--[if lt IE 9]>
+			<script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
+			<script src="https://oss.maxcdn.com/libs/respond.js/1.4.2/respond.min.js"></script>
+		<![endif]-->
+
+    
+  </head>
+
+  <body>
+    <div id="wrap">
+
+      
+      <nav class="navbar navbar-default">
+  <div class="container">
+    <div class="navbar-header">
+      <a class="navbar-brand" href="https://thefallenphoenix.net/"><i class="fa fa-home"></i></a>
+      <button type="button" class="navbar-toggle" data-toggle="collapse" data-target="#navbar">
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+    </div>
+    <div class="navbar-collapse collapse" id="navbar">
+      <ul class="nav navbar-nav navbar-right">
+      
+        
+        
+        <li><a href="/blog/">BLOG</a></li>
+        
+        
+        
+        <li><a href="https://docs.google.com/document/d/1kpHt1jA65unXkgB_9yLuYKbtOi_T2kDXhnrOeAsFmlc/edit?usp=sharing" target="_blank">RESUME</a></li>
+        
+        
+      
+      </ul>
+    </div>
+  </div>
+</nav>
+
+      
+      <div class="container">
+        <div class="blog-post">
+          <h3>
+            <strong><a href="https://thefallenphoenix.net/blog/requests-and-limits-in-k8s/">Requests &amp; Limits in K8s</a></strong>
+          </h3>
+        </div>
+        <div class="blog-title">
+          <h4>
+          August 27, 2020
+            &nbsp;&nbsp;
+            
+          </h4>
+        </div>
+        <div class="panel panel-default">
+          <div class="panel-body">
+            <div class="blogpost">
+              <h1 id="requests--limits-in-k8s">Requests &amp; Limits in K8s</h1>
+<p>When deploying apps to Kubernetes (K8s) one thing to get right in your deployments are the requests &amp; limits for both CPU &amp; Memory (RAM). Understanding the differences between requests &amp; limits, the consequences of the values you set etc are all very important things for you to understand in the K8s world.</p>
+<p>Throughout this blog post we will use the following example app as a reference point (this isn&rsquo;t valid K8s yaml - just pseudo-code):</p>
+<pre><code>DemoApp1:
+  Requests:
+    CPU: 1
+    Memory: 512Mi
+  Limits:
+    CPU: 2
+    Memory: 1Gi
+</code></pre><blockquote>
+<p>CPU resources are defined above using full cores as they have no suffix. Fractions can be achieved using Millicores (thousandths of a core). For example <code>200m</code> would be one fifth of a core. You can be granular down to a single millicore (<code>1m</code>) if desired.</p>
+</blockquote>
+<blockquote>
+<p>Memory resources as you can see are defined using &ldquo;binary prefixes&rdquo; instead of &ldquo;decimal prefixes&rdquo; (based on multiples of 1024 instead of 1000).</p>
+</blockquote>
+<p>Let&rsquo;s start with some simple questions.</p>
+<h2 id="what-are-requests">What are Requests?</h2>
+<p>Requests are the guaranteed amount of resources that K8s will ensure are available for your app. So when <code>DemoApp1</code> requests 1 CPU &amp; 512Mi, it will be scheduled by K8s to a node that has enough capacity available to meet these requests.</p>
+<h2 id="what-are-limits">What are Limits?</h2>
+<p>Limits describe the total amount of resources your app can burst up to. In our case <code>DemoApp1</code> can burst up to twice it&rsquo;s request values if needed. There is a very important thing to note here: K8s does <strong>NOT</strong> guarantee that the limit values will be available to an app on the node that it has been scheduled to.</p>
+<p><br>
+No doubt all this raises several questions, so lets try to answer them.</p>
+<h2 id="what-happens-if">What happens if?</h2>
+<p><strong>Q.</strong> What happens if no node has enough resources to meet my app&rsquo;s requests when I deploy it?<br>
+<strong>A.</strong> Assuming you are running the <a href="https://github.com/kubernetes/autoscaler/tree/master/cluster-autoscaler">cluster-autoscaler</a> (you are right?) it will spin up a new node (or multiple nodes if required) to meet the demand.</p>
+<p><strong>Q.</strong> What happens if no node has enough resources to meet my app&rsquo;s limits when I deploy it?<br>
+<strong>A.</strong> Limits are not evaluated when K8s is looking to deploy your app to a node. K8s will only evaluate your request values.</p>
+<p><strong>Q.</strong> So what happens if my app needs to burst &ldquo;into&rdquo; it&rsquo;s limit values?<br>
+<strong>A1.</strong> One of two things will happen. If there are enough resources available on the node that your app is deployed to then your app will be able to burst up to those limits as expected. It&rsquo;s interesting to note here that these extra resources may be &ldquo;taken&rdquo; from other app&rsquo;s request resources that they are not currently using.<br>
+<strong>A2.</strong> If there are no available resources then your app will be &ldquo;cut off&rdquo; at that point. If some but not all the limit resources available your app can make use of them of course.</p>
+<p><strong>Q.</strong> Does anything special happen if the limit resources are not available for my app to burst into?<br>
+<strong>A.</strong> For CPU: no. Your app is simply throttled at the request value or the amount it was able to burst up to. For memory however, K8s will terminate the pod your app is running in with an <code>OOMKilled</code> message.</p>
+<p><br>
+In the answers above we got a couple of interesting little tidbits about how limits work. Lets explore that because it&rsquo;s useful to understand the mechanics at work here.</p>
+<h2 id="how-limits-work">How Limits Work</h2>
+<p>First of all as mentioned briefly above, when K8s schedules your app to a node, limits are ignored. It is scheduled based on it&rsquo;s request values only. So it is perfectly possible to be deployed to a node that can meet the app&rsquo;s request values but would never be able to meet it&rsquo;s limit values.</p>
+<p>This does raise the question though: if limit values are not evaluated at deploy time, then where does K8s get the resources to allow apps to burst at all? Again, this is alluded to above. When an app runs, K8s dynamically updates the CPU/Memory resources assigned to it in order to meet it&rsquo;s current requirements. This means that even though <code>DemoApp1</code> is requesting 1 CPU for example, if it is currently idling at <code>150m</code> then that is all K8s will assign to that app. This means that when your app isn&rsquo;t using all of the resources that it requested, then another app deployed to the same node may use these currently unused resources to burst into, up to it&rsquo;s own limit values.</p>
+<p>What is more interesting here is that as we know K8s guarantees that it can meet your app&rsquo;s request values. So when <code>DemoApp1</code> eventually gets off it&rsquo;s backside and does some work and starts using those additional CPU resources, what happens (assuming the node is not under subscribed of course)? Well K8s dynamically updates the resources assigned to <code>DemoApp1</code> to meet it&rsquo;s current needs. It does this by taking back the resources that the other app is currently using to burst. Obviously if the other app still needs those burst resources it may then encounter an error as previously discussed.</p>
+<p>Some may assume that hitting a limit would trigger the <code>cluster-autoscaler</code> but it does <strong>NOT</strong>. The <code>cluster-autoscaler</code> only evaluates required resources at deployment time. This is a key reason why getting your requests &amp; limits correct is so crucial.</p>
+<p>This image from AWS (see original blog post containing this image <a href="https://aws.amazon.com/blogs/containers/cost-optimization-for-kubernetes-on-aws/">here</a>) really succinctly demonstrates the requests/limits relationship in a very simple way:</p>
+<p><img src="img/k8s-requests-limits.png" alt="©️ Amazon Web Services, Inc. or its affiliates. All rights reserved."></p>
+<h2 id="slack">Slack</h2>
+<p>Not the popular chat platform. Slack is an important concept in K8s, many blog posts refer to it, and it is important to understand for some of the scenarios we&rsquo;ll take a look at next.</p>
+<p>Slack space (or sometimes cost) is the amount of &ldquo;wasted&rdquo; resources assigned to your apps. Slack is basically the difference between the resources assigned to your app and what it is actually using. There are many tools (assuming you don&rsquo;t have your own custom graphs in something like Grafana) that shows this slack space such as <a href="https://github.com/hjacobs/kube-resource-report">kube-resource-report</a>.</p>
+<p>Many blog posts that talk about reducing your K8s costs will talk about slack space. They will also often tell you to get rid of all this slack space without any thought as to the potential consequences of that. Yes that&rsquo;s right, the situation is more nuanced than many people admit to and blindly &ldquo;getting rid of&rdquo; all your slack space may actually be a very bad thing. We&rsquo;ll see how sometimes slack space is a good thing in the scenarios we look at.</p>
+<h2 id="scenarios">Scenarios</h2>
+<p>Now we will take this knowledge and look at some scenarios we might find ourselves in and compare the benefits &amp; risks of each.</p>
+<p>To get the &ldquo;full picture&rdquo; make sure you take a look at our values and the key facts for each scenario as these will differ in subtle ways at times.</p>
+<h3 id="scenario-1">Scenario 1</h3>
+<pre><code>DemoApp1:
+  Requests:
+    CPU: 1
+    Memory: 512Mi
+  Limits:
+    CPU: 2
+    Memory: 1Gi
+</code></pre><p>The key facts for this scenario:</p>
+<ul>
+<li>Request values reflect average app usage.</li>
+<li>Limit values are double the request values.</li>
+</ul>
+<p>Benefits:</p>
+<ul>
+<li>Relatively little slack space.</li>
+<li>With such high limits, we can handle very large spikes.</li>
+</ul>
+<p>Risks:</p>
+<ul>
+<li>If you expect to burst as high as double your requests it is more likely your app will be throttled or killed.</li>
+<li>If you expect to have to burst often, your app is more likely to be throttled or killed.</li>
+</ul>
+<h3 id="scenario-2">Scenario 2</h3>
+<pre><code>DemoApp1:
+  Requests:
+    CPU: 1
+    Memory: 512Mi
+  Limits:
+    CPU: 1.2
+    Memory: 768Mi
+</code></pre><p>The key facts for this scenario:</p>
+<ul>
+<li>Request values reflect average app usage.</li>
+<li>Limit values are slightly higher than the request values.</li>
+</ul>
+<p>Benefits:</p>
+<ul>
+<li>Relatively little slack space.</li>
+</ul>
+<p>Risks:</p>
+<ul>
+<li>If you expect to have to burst often, your app is more likely to be throttled or killed.</li>
+</ul>
+<h3 id="scenario-3">Scenario 3</h3>
+<pre><code>DemoApp1:
+  Requests:
+    CPU: 1
+    Memory: 512Mi
+  Limits:
+    CPU: 1
+    Memory: 512Mi
+</code></pre><p>The key facts for this scenario:</p>
+<ul>
+<li>Request values reflect average app usage.</li>
+<li>Limit values are set identically to the request values.</li>
+</ul>
+<p>Benefits:</p>
+<ul>
+<li>Relatively little slack space.</li>
+</ul>
+<p>Risks:</p>
+<ul>
+<li>If you have to burst at all your app will be throttled or killed.</li>
+</ul>
+<h3 id="scenario-4">Scenario 4</h3>
+<pre><code>DemoApp1:
+  Requests:
+    CPU: 1
+    Memory: 512Mi
+  Limits:
+    CPU: 2
+    Memory: 1Gi
+</code></pre><p>The key facts for this scenario:</p>
+<ul>
+<li>Average resource usage is far lower than request values.</li>
+<li>Limit values are double the request values.</li>
+<li>Burst usage rarely goes as high as the request values.</li>
+<li>App has never been known to go as high as limit values.</li>
+</ul>
+<p>Benefits:</p>
+<ul>
+<li>You are extremely unlikely to ever be throttled or killed due to resource utilisation as a result of spikes.</li>
+</ul>
+<p>Risks:</p>
+<ul>
+<li>You have significant slack space.</li>
+</ul>
+<h3 id="scenario-5">Scenario 5</h3>
+<pre><code>DemoApp1:
+  Requests:
+    CPU: 1
+    Memory: 512Mi
+  Limits:
+    CPU: 1
+    Memory: 512Mi
+</code></pre><p>The key facts for this scenario:</p>
+<ul>
+<li>Average resource usage is far lower than request values.</li>
+<li>Limit values are set identically to the request values.</li>
+<li>Burst usage rarely goes as high as the request values.</li>
+<li>App has never been known to go as high as limit values.</li>
+</ul>
+<p>Benefits:</p>
+<ul>
+<li>You are extremely unlikely to ever be throttled or killed due to resource utilisation as a result of spikes.</li>
+</ul>
+<p>Risks:</p>
+<ul>
+<li>You have significant slack space.</li>
+<li>You essentially don&rsquo;t have any limit values (due to them being identical to the request values) so if you ever have an unexpected spike it is highly likely that your app will be throttled or killed.</li>
+</ul>
+<h2 id="conclusion">Conclusion</h2>
+<p>As we can see from the scenarios, getting the requests &amp; limits right for your app is as crucial as it is subtle and dare I say, just a little complicated. We saw that slack space, so looked down upon by many can have the benefit of helping prevent situations where your app is throttled or killed at the cost of consuming extra resources (and upping your AWS bill!).</p>
+<p>Undoubtedly getting the right values will take a little trial and error. The TL;DR of this for me is:</p>
+<ul>
+<li>Have a basic fundamental knowledge of how requests &amp; limits work.</li>
+<li>Understand your app&rsquo;s usage profile (things like metrics being fed into a solution like Grafana are gold here).</li>
+<li>Evaluate &amp; balance the benefits/risks you are willing to take.</li>
+<li>Test, update values, test, etc.</li>
+</ul>
+<p>Of course this doesn&rsquo;t cover other situations that will influence how your app responds to traffic. Your app&rsquo;s deployment is likely to be autoscaled via the <a href="https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/">Horizontal Pod Autoscaler</a> for example. This increases the number of replicas of your app across the cluster based on certain pre-defined resource thresholds. Obviously this impacts how your app behaves in terms of resource usage and the consequences of bursting into your limit values etc. This is why testing these values is key.</p>
+<p>Hopefully though this has been useful food for thought and will enable you to make more informed decisions about your resource settings from now on.</p>
+
+              <hr>
+              <div class="related-posts">
+                <h5>Related Posts</h5>
+                
+              </div>
+            </div>
+          </div>
+          <hr>
+        </div>
+      </div>
+      
+    </div>
+
+    
+    <footer>
+  <div id="footer">
+    <div class="container">
+      <p class="text-muted">&copy; Danny Roberts. All rights reserved. Powered by <a href="https://gohugo.io/">Hugo</a> and
+      <a href="http://www.github.com/nurlansu/hugo-sustain/">sustain</a> with ♥</p>
+    </div>
+  </div>
+</footer>
+<div class="footer"></div>
+
+
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
+
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
+<script src="https://thefallenphoenix.net/js/docs.min.js"></script>
+<script src="https://thefallenphoenix.net/js/main.js"></script>
+
+<script src="https://thefallenphoenix.net/js/ie10-viewport-bug-workaround.js"></script><!-- Syntax highlighting -->
+<script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.7.0/highlight.min.js"></script>
+<script>hljs.initHighlightingOnLoad();</script>
+
+
+
+    
+  </body>
+</html>
